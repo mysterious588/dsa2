@@ -372,12 +372,54 @@ def pd_col_genetic_transform(df=None, col=None, pars=None):
     return df_genetic, col_pars
 
 
+'''
+Using Variation Autoencoders, the function augments more data into the dataset
+
+params:
+        df          : (pandas dataframe) original dataframe
+        n_samples   : (int) number of samples you would like to add, defaul is 10%
+        primary_key : (String) the primary key of dataframe
+        aggregate   : (boolean) if False, prints SVD metrics, else it averages them
+        
+returns:
+        df_new      : (pandas dataframe) df with more augmented data
+        col         : (list of strings) same columns 
+'''
+def pd_vae_augmentation(df, col=None, pars=None, n_samples=None, primary_key=None, aggregate=True):
+    
+    from sdv.demo import load_tabular_demo
+    from sdv.tabular import TVAE
+    from sdv.evaluation import evaluate
 
 
-
-
-
-
+    # add 10% more samples
+    if n_samples == None:
+        if len(df) >= 10:
+          log('samples amount not specified, adding 10%')
+          n_samples = len(df) // 10
+        else:
+          log('dataframe too small, adding only 1')
+          n_samples = 1
+    
+    # model fitting
+    model = TVAE(primary_key=primary_key)
+    model.fit(df)
+    
+    # generating new samples
+    new_data = model.sample(n_samples)
+    
+    # log the evaluations
+    evals = evaluate(new_data, df, aggregate=aggregate)
+    log('######### Evaluation Results #########')
+    if aggregate:
+      log(evals)
+    else:
+      log_pd(evals, n=7)
+    
+    # appending new data    
+    df_new = df.append(new_data)
+    
+    return df_new, col
 
 def pd_col_covariate_shift_adjustment():
    """

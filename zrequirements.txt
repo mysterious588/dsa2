@@ -22,3 +22,5 @@ numba==0.50.1
 #pytz==2020.1
 tqdm
 gplearn
+
+sdv==0.6.1
