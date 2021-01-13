@@ -21,9 +21,6 @@ List of Root Categories
 List of Suffix Appenders
 Other Reserved Strings
 Root Category Family Tree Definitions
-
-
-
 """
 import warnings
 warnings.filterwarnings('ignore')
@@ -164,28 +161,21 @@ def pd_autoencoder(df, col, pars):
     """"
     (4) Autoencoder
 An autoencoder is a type of artificial neural network used to learn efficient data codings in an unsupervised manner. The aim of an autoencoder is to learn a representation (encoding) for a set of data, typically for dimensionality reduction, by training the network to ignore noise.
-
 (i) Feed Forward
-
 The simplest form of an autoencoder is a feedforward, non-recurrent neural network similar to single layer perceptrons that participate in multilayer perceptrons
-
 from sklearn.preprocessing import minmax_scale
 import tensorflow as tf
 import numpy as np
-
 def encoder_dataset(df, drop=None, dimesions=20):
-
   if drop:
     train_scaled = minmax_scale(df.drop(drop,axis=1).values, axis = 0)
   else:
     train_scaled = minmax_scale(df.values, axis = 0)
-
   # define the number of encoding dimensions
   encoding_dim = dimesions
   # define the number of features
   ncol = train_scaled.shape[1]
   input_dim = tf.keras.Input(shape = (ncol, ))
-
   # Encoder Layers
   encoded1 = tf.keras.layers.Dense(3000, activation = 'relu')(input_dim)
   encoded2 = tf.keras.layers.Dense(2750, activation = 'relu')(encoded1)
@@ -194,19 +184,14 @@ def encoder_dataset(df, drop=None, dimesions=20):
   encoded5 = tf.keras.layers.Dense(500, activation = 'relu')(encoded4)
   encoded6 = tf.keras.layers.Dense(250, activation = 'relu')(encoded5)
   encoded7 = tf.keras.layers.Dense(encoding_dim, activation = 'relu')(encoded6)
-
   encoder = tf.keras.Model(inputs = input_dim, outputs = encoded7)
   encoded_input = tf.keras.Input(shape = (encoding_dim, ))
-
   encoded_train = pd.DataFrame(encoder.predict(train_scaled),index=df.index)
   encoded_train = encoded_train.add_prefix('encoded_')
   if drop:
     encoded_train = pd.concat((df[drop],encoded_train),axis=1)
-
   return encoded_train
-
 df_out = mapper.encoder_dataset(df.copy(), ["Close_1"], 15); df_out.head()
-
     """
     pass
 
@@ -293,7 +278,6 @@ def save_json(js, pfile, mode='a'):
 def pd_col_genetic_transform(df=None, col=None, pars=None):
     """
         Find Symbolic formulae for faeture engineering
-
     """
     prefix = 'col_genetic'
     ######################################################################################
@@ -374,23 +358,32 @@ def pd_col_genetic_transform(df=None, col=None, pars=None):
 
 '''
 Using Variation Autoencoders, the function augments more data into the dataset
-
 params:
         df          : (pandas dataframe) original dataframe
-        n_samples   : (int) number of samples you would like to add, defaul is 10%
-        primary_key : (String) the primary key of dataframe
-        aggregate   : (boolean) if False, prints SVD metrics, else it averages them
-        
+        n_samples   : (int - optional) number of samples you would like to add, defaul is 10%
+        primary_key : (String - optional) the primary key of dataframe
+        aggregate   : (boolean - optional) if False, prints SVD metrics, else it averages them
+        save_model  : (boolean - optional) if true, saves the model from
+        pars        : (dict - optional) contains:
+                        save_model_path: saving location if save_model is set to True
+                        load_model_path: saved model location to skip training
 returns:
         df_new      : (pandas dataframe) df with more augmented data
-        col         : (list of strings) same columns 
+        col         : (list of strings) same columns
 '''
-def pd_vae_augmentation(df, col=None, pars=None, n_samples=None, primary_key=None, aggregate=True):
+def pd_vae_augmentation(df, col=None, pars=None, n_samples=None, primary_key=None, aggregate=False, save_model=False):
     
-    from sdv.demo import load_tabular_demo
-    from sdv.tabular import TVAE
-    from sdv.evaluation import evaluate
-
+    # importing libraries
+    try:
+        from sdv.demo import load_tabular_demo
+        from sdv.tabular import TVAE
+        from sdv.evaluation import evaluate
+    except:
+        os.system("pip install sdv")
+        from sdv.demo import load_tabular_demo
+        from sdv.tabular import TVAE
+        from sdv.evaluation import evaluate      
+    
 
     # add 10% more samples
     if n_samples == None:
@@ -402,13 +395,33 @@ def pd_vae_augmentation(df, col=None, pars=None, n_samples=None, primary_key=Non
           n_samples = 1
     
     # model fitting
-    model = TVAE(primary_key=primary_key)
-    model.fit(df)
+    if pars: 
+        if 'load_model_path' in pars:
+            model = load(pars['load_model_path'])
+        else:
+            log('##### Training Started #####')
+            model = TVAE(primary_key=primary_key)
+            model.fit(df)
+            log('##### Training Finshed #####')
+            if save_model:
+                try:
+                    log('saving model...')
+                    save(model, pars['save_model_path'])
+                    log('model saved at: ' + pars['save_model_path'])
+                except:
+                    log('saving model failed, did you choose a valid location?')
+    else:
+        model = TVAE(primary_key=primary_key)
+        log('##### Training Started #####')
+        model.fit(df)
+        log('##### Training Finshed #####')
     
     # generating new samples
+    log('##### Generating Samples #####')
     new_data = model.sample(n_samples)
     
     # log the evaluations
+    log('######### Evaluation Started #########')
     evals = evaluate(new_data, df, aggregate=aggregate)
     log('######### Evaluation Results #########')
     if aggregate:
@@ -419,12 +432,38 @@ def pd_vae_augmentation(df, col=None, pars=None, n_samples=None, primary_key=Non
     # appending new data    
     df_new = df.append(new_data)
     
+    log(str(len(df_new) - len(df)) + ' new data added')
+    
+    log('###### augmentation complete ######')
+    
     return df_new, col
+
+
+def test_sdv():
+    from sklearn.datasets import load_boston
+    
+    # loading boston data
+    data = load_boston()
+    df = pd.DataFrame(data.data, columns=data.feature_names)
+    df.head()    
+    
+    log('##### testing augmentation #####')
+    
+    # training new data test
+    path = os.getcwd() + 'model.pkl'
+    pars = {'save_model_path': path}
+    df_new, _ = pd_vae_augmentation(df, save_model=True, pars=pars)
+    
+    log('####### Generating using saved model test started #######')
+    
+    # generating data from existing model test
+    pars = {'load_model_path': path}
+    df_new, _ = pd_vae_augmentation(df, pars=pars)
+
 
 def pd_col_covariate_shift_adjustment():
    """
     https://towardsdatascience.com/understanding-dataset-shift-f2a5a262a766
-
      Covariate shift has been extensively studied in the literature, and a number of proposals to work under it have been published. Some of the most important ones include:
         Weighting the log-likelihood function (Shimodaira, 2000)
         Importance weighted cross-validation (Sugiyama et al, 2007 JMLR)
@@ -432,23 +471,18 @@ def pd_col_covariate_shift_adjustment():
         Kernel mean matching (Gretton et al., 2009)
         Adversarial search (Globerson et al, 2009)
         Frank-Wolfe algorithm (Wen et al., 2015)
-
 import numpy as np
 from scipy import sparse
-
 # .. for plotting ..
 import pylab as plt
 # .. to generate a synthetic dataset ..
 from sklearn import datasets
-
 n_samples, n_features = 1000, 10000
 A, b = datasets.make_regression(n_samples, n_features)
-
 def FW(alpha, max_iter=200, tol=1e-8):
     # .. initial estimate, could be any feasible point ..
     x_t = sparse.dok_matrix((n_features, 1))
     trace = []  # to keep track of the gap
-
     # .. some quantities can be precomputed ..
     Atb = A.T.dot(b)
     for it in range(max_iter):
@@ -456,7 +490,6 @@ def FW(alpha, max_iter=200, tol=1e-8):
         # .. of the use of sparse matrices ..
         Ax = x_t.T.dot(A.T).ravel()
         grad = (A.T.dot(Ax) - Atb)
-
         # .. the LMO results in a vector that is zero everywhere except for ..
         # .. a single index. Of this vector we only store its index and magnitude ..
         idx_oracle = np.argmax(np.abs(grad))
@@ -470,7 +503,6 @@ def FW(alpha, max_iter=200, tol=1e-8):
         x_t = (1. - step_size) * x_t
         x_t[idx_oracle] = x_t[idx_oracle] + step_size * mag_oracle
     return x_t, np.array(trace)
-
 # .. plot evolution of FW gap ..
 sol, trace = FW(.5 * n_features)
 plt.plot(trace)
@@ -480,15 +512,11 @@ plt.ylabel('FW gap')
 plt.title('FW on a Lasso problem')
 plt.grid()
 plt.show()
-
 sparsity = np.mean(sol.toarray().ravel() != 0)
 print('Sparsity of solution: %s%%' % (sparsity * 100))
-
    """
    pass
 
 if __name__ == "__main__":
     import fire
     fire.Fire()
-
-
