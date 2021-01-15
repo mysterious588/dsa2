@@ -368,7 +368,7 @@ def pd_augmentation_sdv(df, col=None, pars={})  :
             pars        : (dict - optional) contains:                                          
                 n_samples     : (int - optional) number of samples you would like to add, defaul is 10%
                 primary_key   : (String - optional) the primary key of dataframe
-                metrics_type  : (boolean - optional) if False, prints SVD metrics, else it averages them
+                aggregate  : (boolean - optional) if False, prints SVD metrics, else it averages them
                 path_model_save: saving location if save_model is set to True
                 path_model_load: saved model location to skip training
                 path_data_new  : new data where saved
@@ -377,8 +377,8 @@ def pd_augmentation_sdv(df, col=None, pars={})  :
             col         : (list of strings) same columns
     '''
     n_samples       = pars.get('n_samples', max(1, int(len(df) * 0.10) ) )   ## Add 10% or 1 sample by default value
-    primary_key     = pars.get('colid', "")  ### Custom can be created on the fly
-    metrics_type    = pars.get('metrics_type', "aggregate")
+    primary_key     = pars.get('colid', None)  ### Custom can be created on the fly
+    metrics_type    = pars.get('aggregate', False)
     path_model_save = pars.get('path_model_save', 'data/output/ztmp/')
     model_name      = pars.get('model_name', "TVAE")
     
@@ -387,12 +387,18 @@ def pd_augmentation_sdv(df, col=None, pars={})  :
         #from sdv.demo import load_tabular_demo
         from sdv.tabular import TVAE
         from sdv.tabular import CTGAN
+        from sdv.timeseries import PAR
         from sdv.evaluation import evaluate
+        import ctgan
+        
+        if ctgan.__version__ != '0.3.1.dev0':
+            raise Exception('ctgan outdated, updating...')
     except:
         os.system("pip install sdv")
-        os.sytem('pip install ctgan==0.3.1.dev0')
+        os.system('pip install ctgan==0.3.1.dev0')
         from sdv.tabular import TVAE
         from sdv.tabular import CTGAN
+        from sdv.timeseries import PAR
         from sdv.evaluation import evaluate      
     
 
@@ -401,12 +407,14 @@ def pd_augmentation_sdv(df, col=None, pars={})  :
             model = load(pars['path_model_load'])
     else:
             log('##### Training Started #####')
-            if primary_key == "" :
-                primary_key     = "_colid"
-                df[primary_key] = np.arange(0, len(df))
                 
-            model = {'TVAE' : TVAE, 'CTGAN' : CTGAN}[model_name]
-            model = model(primary_key=primary_key)   
+            model = {'TVAE' : TVAE, 'CTGAN' : CTGAN, 'PAR' : PAR}[model_name]
+            if model_name == 'PAR':
+                model = model(entity_columns = pars['entity_columns'],
+                              context_columns = pars['context_columns'],
+                              sequence_index = pars['sequence_index'])
+            else:
+                model = model(primary_key=primary_key)   
             model.fit(df)
             log('##### Training Finshed #####')
             try:
@@ -421,7 +429,7 @@ def pd_augmentation_sdv(df, col=None, pars={})  :
     
    
     log('######### Evaluation Results #########')
-    if metrics_type == 'aggregate':
+    if metrics_type == True:
       evals = evaluate(new_data, df, aggregate= True )        
       log(evals)
     else:
@@ -429,7 +437,7 @@ def pd_augmentation_sdv(df, col=None, pars={})  :
       log_pd(evals, n=7)
     
     # appending new data    
-    df_new = df.append(new_data)   ### Check primayr_key
+    df_new = df.append(new_data)
     log(str(len(df_new) - len(df)) + ' new data added')
     
     if 'path_newdata' in pars :
@@ -474,6 +482,35 @@ def test_sdv_ctgan():
     
     log('####### Generating using saved model test started #######')    
     pars = {'path_model_load': path}
+    df_new, _ = pd_augmentation_sdv(df, pars=pars)
+    
+    
+def test_sdv_par():
+    try:
+        from sdv.demo import load_timeseries_demo
+    except:
+        os.system('pip install sdv')
+        from sdv.demo import load_timeseries_demo
+        
+    df = load_timeseries_demo()
+    log_pd(df)
+    entity_columns = ['Symbol']
+    context_columns = ['MarketCap', 'Sector', 'Industry']
+    sequence_index = 'Date'
+    
+    log('##### testing augmentation #####')
+    path = os.getcwd() + '\zz_model_par_augmentation.pkl'
+    pars = {'path_model_save': path,
+            'model_name': 'PAR',
+            'entity_columns' : entity_columns,
+            'context_columns': context_columns,
+            'sequence_index' : sequence_index,
+            'n_samples' : 5}
+    df_new, _ = pd_augmentation_sdv(df, pars=pars)
+    
+    log('####### Generating using saved model test started #######')    
+    pars = {'path_model_load': path,
+            'n_samples' : 5}
     df_new, _ = pd_augmentation_sdv(df, pars=pars)
     
     
