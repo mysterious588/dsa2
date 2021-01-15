@@ -386,10 +386,13 @@ def pd_augmentation_sdv(df, col=None, pars={})  :
     try:
         #from sdv.demo import load_tabular_demo
         from sdv.tabular import TVAE
+        from sdv.tabular import CTGAN
         from sdv.evaluation import evaluate
     except:
         os.system("pip install sdv")
+        os.sytem('pip install ctgan==0.3.1.dev0')
         from sdv.tabular import TVAE
+        from sdv.tabular import CTGAN
         from sdv.evaluation import evaluate      
     
 
@@ -402,8 +405,8 @@ def pd_augmentation_sdv(df, col=None, pars={})  :
                 primary_key     = "_colid"
                 df[primary_key] = np.arange(0, len(df))
                 
-            model = {'TVAE' : TVAE}[model_name]    
-            model = model(primary_key=primary_key)
+            model = {'TVAE' : TVAE, 'CTGAN' : CTGAN}[model_name]
+            model = model(primary_key=primary_key)   
             model.fit(df)
             log('##### Training Finshed #####')
             try:
@@ -437,7 +440,7 @@ def pd_augmentation_sdv(df, col=None, pars={})  :
     return df_new, col
 
 
-def test_sdv():
+def test_sdv_vae():
     from sklearn.datasets import load_boston
     
     # loading boston data
@@ -452,9 +455,28 @@ def test_sdv():
     
     log('####### Generating using saved model test started #######')    
     pars = {'path_model_load': path}
-    df_new, _ = pd_vae_augmentation(df, pars=pars)
+    df_new, _ = pd_augmentation_sdv(df, pars=pars)
+    
 
-
+def test_sdv_ctgan():
+    from sklearn.datasets import load_boston
+    
+    # loading boston data
+    data = load_boston()
+    df = pd.DataFrame(data.data, columns=data.feature_names)
+    log_pd(df)    
+    
+    log('##### testing augmentation #####')    
+    path = os.getcwd() + '\zz_model_ctgan_augmentation.pkl'
+    pars = {'path_model_save': path,
+            'model_name': 'CTGAN'}
+    df_new, _ = pd_augmentation_sdv(df, pars=pars)
+    
+    log('####### Generating using saved model test started #######')    
+    pars = {'path_model_load': path}
+    df_new, _ = pd_augmentation_sdv(df, pars=pars)
+    
+    
 def pd_col_covariate_shift_adjustment():
    """
     https://towardsdatascience.com/understanding-dataset-shift-f2a5a262a766
